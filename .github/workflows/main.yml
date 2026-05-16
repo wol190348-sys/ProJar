@@ -1,0 +1,92 @@
+name: PDF Archive
+
+on:
+  # Run manually from Actions tab
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD) - defaults to TODAY'
+        required: false
+        default: ''
+      end_date:
+        description: 'End date (YYYY-MM-DD) - defaults to 2007-06-02'
+        required: false
+        default: '2007-06-02'
+  
+  # Schedule to run on day 3 of every month at 09:00 AM UTC
+  schedule:
+    - cron: '0 9 3 * *'  # At 09:00 AM on day 3 of every month
+
+jobs:
+  scrape-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Verify AWS Secrets
+        run: |
+          echo "Checking if AWS secrets are set..."
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "ERROR: AWS_ACCESS_KEY_ID secret is not set!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "ERROR: AWS_SECRET_ACCESS_KEY secret is not set!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.S3_BUCKET_NAME }}" ]; then
+            echo "ERROR: S3_BUCKET_NAME secret is not set!"
+            exit 1
+          fi
+          echo "✓ All AWS secrets are configured"
+          echo "✓ Access Key ID starts with: $(echo '${{ secrets.AWS_ACCESS_KEY_ID }}' | cut -c1-4)..."
+          echo "✓ Bucket name: ${{ secrets.S3_BUCKET_NAME }}"
+      
+      - name: Run PDF scraper
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          MAX_DAYS_PER_RUN: 5000
+          MAX_RUNTIME_MINUTES: 330
+          USE_CHECKPOINT: 1
+          SCRAPE_MODE: ${{ github.event_name == 'schedule' && 'monthly' || 'checkpoint' }}
+        run: |
+          if [ -n "${{ github.event.inputs.start_date }}" ] && [ -n "${{ github.event.inputs.end_date }}" ]; then
+            python pdf_scraper.py "${{ github.event.inputs.start_date }}" "${{ github.event.inputs.end_date }}"
+          elif [ -n "${{ github.event.inputs.start_date }}" ]; then
+            python pdf_scraper.py "${{ github.event.inputs.start_date }}"
+          else
+            python pdf_scraper.py
+          fi
+      
+      - name: Upload logs as artifact (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-scraper-logs
+          path: |
+            *.log
+            **/*.log
+          retention-days: 7
