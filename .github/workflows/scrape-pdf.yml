@@ -1,4 +1,4 @@
-name: PDF Archive (Cloudflare R2)
+name: Scrape Aljarida PDF Archive
 
 on:
   # Run manually from Actions tab
@@ -18,7 +18,7 @@ on:
     - cron: '0 9 3 * *'  # At 09:00 AM on day 3 of every month
 
 jobs:
-  scrape-pdf-cf:
+  scrape-pdf:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6 hours max
     
@@ -44,54 +44,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Verify Cloudflare R2 Secrets
+      - name: Verify AWS Secrets
         run: |
-          echo "Checking if Cloudflare R2 secrets are set..."
-          if [ -z "${{ secrets.CF_R2_ACCESS_KEY_ID }}" ]; then
-            echo "ERROR: CF_R2_ACCESS_KEY_ID secret is not set!"
+          echo "Checking if AWS secrets are set..."
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "ERROR: AWS_ACCESS_KEY_ID secret is not set!"
             exit 1
           fi
-          if [ -z "${{ secrets.CF_R2_SECRET_ACCESS_KEY }}" ]; then
-            echo "ERROR: CF_R2_SECRET_ACCESS_KEY secret is not set!"
+          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "ERROR: AWS_SECRET_ACCESS_KEY secret is not set!"
             exit 1
           fi
-          if [ -z "${{ secrets.CF_R2_ENDPOINT_URL }}" ]; then
-            echo "ERROR: CF_R2_ENDPOINT_URL secret is not set!"
-            echo "Expected format: https://<account_id>.r2.cloudflarestorage.com"
+          if [ -z "${{ secrets.S3_BUCKET_NAME }}" ]; then
+            echo "ERROR: S3_BUCKET_NAME secret is not set!"
             exit 1
           fi
-          if [ -z "${{ secrets.CF_R2_BUCKET_NAME }}" ]; then
-            echo "ERROR: CF_R2_BUCKET_NAME secret is not set!"
-            exit 1
-          fi
-          echo "✓ All Cloudflare R2 secrets are configured"
-          echo "✓ Access Key ID starts with: $(echo '${{ secrets.CF_R2_ACCESS_KEY_ID }}' | cut -c1-4)..."
-          echo "✓ Bucket name: ${{ secrets.CF_R2_BUCKET_NAME }}"
+          echo "✓ All AWS secrets are configured"
+          echo "✓ Access Key ID starts with: $(echo '${{ secrets.AWS_ACCESS_KEY_ID }}' | cut -c1-4)..."
+          echo "✓ Bucket name: ${{ secrets.S3_BUCKET_NAME }}"
       
-      - name: Run PDF scraper (Cloudflare R2)
+      - name: Run PDF scraper
         env:
-          CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          CF_R2_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          CF_R2_ENDPOINT_URL: ${{ secrets.CF_R2_ENDPOINT_URL }}
-          CF_R2_BUCKET_NAME: ${{ secrets.CF_R2_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           MAX_DAYS_PER_RUN: 5000
           MAX_RUNTIME_MINUTES: 330
           USE_CHECKPOINT: 1
           SCRAPE_MODE: ${{ github.event_name == 'schedule' && 'monthly' || 'checkpoint' }}
         run: |
           if [ -n "${{ github.event.inputs.start_date }}" ] && [ -n "${{ github.event.inputs.end_date }}" ]; then
-            python cf/pdf_scraper.py "${{ github.event.inputs.start_date }}" "${{ github.event.inputs.end_date }}"
+            python pdf_scraper.py "${{ github.event.inputs.start_date }}" "${{ github.event.inputs.end_date }}"
           elif [ -n "${{ github.event.inputs.start_date }}" ]; then
-            python cf/pdf_scraper.py "${{ github.event.inputs.start_date }}"
+            python pdf_scraper.py "${{ github.event.inputs.start_date }}"
           else
-            python cf/pdf_scraper.py
+            python pdf_scraper.py
           fi
       
       - name: Upload logs as artifact (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-scraper-cf-logs
+          name: pdf-scraper-logs
           path: |
             *.log
             **/*.log
