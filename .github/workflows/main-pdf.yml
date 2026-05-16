@@ -1,4 +1,4 @@
-name: Scrape Aljarida PDF Archive
+name: PDF Archive
 
 on:
   # Run manually from Actions tab
