@@ -48,3 +48,9 @@ output/
 
 # Environment variables
 .env
+websites-config.yml
+websites-config-template.yml
+websites-config-prompt.md
+skill.md
+
+doc/*
