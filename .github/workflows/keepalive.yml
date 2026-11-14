@@ -1,0 +1,23 @@
+name: Keep scheduled workflows active
+
+on:
+  schedule:
+    # GitHub disables scheduled workflows after 60 days without repository activity.
+    - cron: '0 0 1,15 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create activity commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keep scheduled workflows active"
+          git push
